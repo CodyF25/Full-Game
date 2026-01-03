@@ -145,6 +145,9 @@ function renderApp() {
   // Current year's rookie class (generated when entering Draft phase).
   let draftClass = null;
 
+    // Simple playoff progression state.
+  let playoffRound = null; // "WC", "DIV", "CONF", "CHAMP", or null
+
 
   /* -------- Team Select Screen -------- */
 
