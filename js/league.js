@@ -669,10 +669,13 @@ function renderApp() {
         // Move into results week and resolve signings.
         resolveFreeAgency();
         phase = "FA_RESULTS";
-      } else if (phase === "FA_RESULTS") {
+          } else if (phase === "FA_RESULTS") {
         // Results week -> draft week.
         phase = "DRAFT";
+        // Generate rookie class for this offseason.
+        draftClass = generateDraftClass();
       } else if (phase === "DRAFT") {
+
         // Draft done -> reset for next season.
         currentWeek = 1;
         league.forEach(t => {
