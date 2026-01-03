@@ -344,9 +344,9 @@ function renderApp() {
 
       const o1 = calcTeamOverall(t1);
       const o2 = calcTeamOverall(t2);
-      const diff = o1 - o2;
-      const baseProb = 0.5 + (diff / 50);
-      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // [web:24]
+           const diff = o1 - o2;
+      const baseProb = 0.5 + (diff / 35); // larger weight so higher OVR matters more
+      const homeWinProb = Math.max(0.15, Math.min(0.85, baseProb));
 
       const roll = Math.random();
       if (roll < homeWinProb) {
