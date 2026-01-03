@@ -642,7 +642,61 @@ function renderApp() {
       else if (page === "playoffs") renderPlayoffPicturePage();
     }
 
+    function renderSchedulePage() {
+      const yourTeamId = controlledTeamId;
+      const teamGames = games.filter(g => g.homeId === yourTeamId || g.awayId === yourTeamId);
 
+      contentDiv.innerHTML = `
+        <h3>Schedule & Results</h3>
+        <p class="fr-small">
+          All completed games involving your team, including playoffs.
+        </p>
+        <table class="fr-table">
+          <thead>
+            <tr>
+              <th>Phase</th>
+              <th>Week/Round</th>
+              <th>Opponent</th>
+              <th>Home/Away</th>
+              <th>Score</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody id="fr-schedule-body"></tbody>
+        </table>
+      `;
+
+      const body = document.getElementById("fr-schedule-body");
+
+      teamGames.forEach(g => {
+        const homeTeam = league.find(t => t.id === g.homeId);
+        const awayTeam = league.find(t => t.id === g.awayId);
+        const youAreHome = g.homeId === yourTeamId;
+        const opp = youAreHome ? awayTeam : homeTeam;
+        const yourScore = youAreHome ? g.homeScore : g.awayScore;
+        const oppScore = youAreHome ? g.awayScore : g.homeScore;
+        const result =
+          yourScore > oppScore ? "W" :
+          yourScore < oppScore ? "L" : "T";
+
+        const phaseLabel = g.isPlayoff ? "PLAYOFFS" : "REGULAR";
+        const roundLabel = g.isPlayoff && g.round ? g.round : `Week ${g.week}`;
+        const haLabel = youAreHome ? "Home" : "Away";
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${phaseLabel}</td>
+          <td>${roundLabel}</td>
+          <td>${opp.abbr}</td>
+          <td>${haLabel}</td>
+          <td>${yourScore}–${oppScore}</td>
+          <td>${result}</td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    
     navButtons.forEach(btn => {
       btn.addEventListener("click", () => {
         setActivePage(btn.getAttribute("data-page"));
