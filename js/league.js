@@ -575,10 +575,33 @@ function renderApp() {
 
     const navButtons = Array.from(document.querySelectorAll("#fr-nav button"));
     const contentDiv = document.getElementById("fr-content");
-    const advanceWeekBtn = document.getElementById("fr-advance-week");
+     const advanceWeekBtn = document.getElementById("fr-advance-week");
 
-    function updateFranchiseHeader()       updateNavLabels(); {
+    function updateNavLabels() {
+      const playoffsBtn = navButtons.find(b => b.getAttribute("data-page") === "playoffs");
+      if (!playoffsBtn) return;
+      if (phase === "DRAFT") {
+        playoffsBtn.textContent = "Draft";
+      } else {
+        playoffsBtn.textContent = "Playoff Picture";
+      }
+    }
+
+    function updateFranchiseHeader() {
       const t = league.find(x => x.id === controlledTeamId);
+      if (!t) return;
+      const overall = calcTeamOverall(t);
+      const off = calcSideOverall(t,"Offense");
+      const def = calcSideOverall(t,"Defense");
+      document.getElementById("fr-ovr").textContent = overall.toFixed(1);
+      document.getElementById("fr-ovr-off").textContent = off.toFixed(1);
+      document.getElementById("fr-ovr-def").textContent = def.toFixed(1);
+      document.getElementById("fr-week").textContent = currentWeek;
+      document.getElementById("fr-record").textContent = `${t.record.wins}-${t.record.losses}`;
+      document.getElementById("fr-phase").textContent = phase;
+      updateNavLabels();
+    }
+
       if (!t) return;
       const overall = calcTeamOverall(t);
       const off = calcSideOverall(t,"Offense");
