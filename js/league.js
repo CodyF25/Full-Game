@@ -602,18 +602,7 @@ function renderApp() {
       updateNavLabels();
     }
 
-      if (!t) return;
-      const overall = calcTeamOverall(t);
-      const off = calcSideOverall(t,"Offense");
-      const def = calcSideOverall(t,"Defense");
-      document.getElementById("fr-ovr").textContent = overall.toFixed(1);
-      document.getElementById("fr-ovr-off").textContent = off.toFixed(1);
-      document.getElementById("fr-ovr-def").textContent = def.toFixed(1);
-      document.getElementById("fr-week").textContent = currentWeek;
-      document.getElementById("fr-record").textContent = `${t.record.wins}-${t.record.losses}`;
-      document.getElementById("fr-phase").textContent = phase;
-    }
-
+     
     function setActivePage(page) {
       navButtons.forEach(btn => {
         btn.classList.toggle("active", btn.getAttribute("data-page") === page);
