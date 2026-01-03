@@ -704,7 +704,7 @@ function renderApp() {
         phase = "REGULAR";
       }
 
-      updateFranchiseHeader();       updateNavLabels();
+      updateFranchiseHeader();
       const active = navButtons.find(b => b.classList.contains("active"));
       if (active) setActivePage(active.getAttribute("data-page"));
     });
