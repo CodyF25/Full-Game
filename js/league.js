@@ -568,6 +568,10 @@ function renderApp() {
             <button data-page="standings">Standings</button>
             <button data-page="playoffs">Playoff Picture</button>
           </div>
+             const navButtons = Array.from(document.querySelectorAll("#fr-nav button"));
+    const contentDiv = document.getElementById("fr-content");
+    const advanceWeekBtn = document.getElementById("fr-advance-week");
+
           <div id="fr-content"></div>
         </div>
       </div>
