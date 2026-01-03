@@ -350,6 +350,28 @@ function renderApp() {
 
       const roll = Math.random();
       if (roll < homeWinProb) {
+              const game = {
+        id: games.length,
+        week: currentWeek,
+        phase,
+        round: null,
+        homeId: t1.id,
+        awayId: t2.id,
+        homeScore: Math.floor(17 + o1 / 5 + Math.random() * 10),
+        awayScore: Math.floor(17 + o2 / 5 + Math.random() * 10),
+        isPlayoff: phase === "PLAYOFFS"
+      };
+
+      // Adjust scores so winner matches the sim result.
+      const homeWon = roll < homeWinProb;
+      if (homeWon && game.homeScore <= game.awayScore) {
+        game.homeScore = game.awayScore + 1;
+      } else if (!homeWon && game.awayScore <= game.homeScore) {
+        game.awayScore = game.homeScore + 1;
+      }
+
+      games.push(game);
+
         t1.record.wins++;
         t2.record.losses++;
       } else {
