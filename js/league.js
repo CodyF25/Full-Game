@@ -581,7 +581,7 @@ function renderApp() {
     const contentDiv = document.getElementById("fr-content");
     const advanceWeekBtn = document.getElementById("fr-advance-week");
 
-    function updateFranchiseHeader() {
+    function updateFranchiseHeader()       updateNavLabels(); {
       const t = league.find(x => x.id === controlledTeamId);
       if (!t) return;
       const overall = calcTeamOverall(t);
@@ -696,7 +696,7 @@ function renderApp() {
         phase = "REGULAR";
       }
 
-      updateFranchiseHeader();
+      updateFranchiseHeader();       updateNavLabels();
       const active = navButtons.find(b => b.classList.contains("active"));
       if (active) setActivePage(active.getAttribute("data-page"));
     });
@@ -1138,7 +1138,7 @@ ${seedLabel(seedsB,7)} ──┘
 
 
     setActivePage("roster");
-    updateFranchiseHeader();
+    updateFranchiseHeader();       updateNavLabels();
   }
 
   goToTeamSelect();
