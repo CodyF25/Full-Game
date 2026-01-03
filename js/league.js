@@ -1,5 +1,7 @@
 // league.js
-// Adds season phase + simple offseason that moves expiring contracts into a free agent pool.
+// Full league: 2 conferences x 4 divisions (4 teams each),
+// regular season + advance-week sim, seeded playoffs view,
+// and an offseason cycle: FA Offers Week -> FA Results Week -> Draft Week -> next season.
 
 const TEAM_CITY = [
   "New York","Los Angeles","Chicago","Houston","Phoenix","Philadelphia",
@@ -129,8 +131,9 @@ function renderApp() {
   const GAMES_PER_SEASON = 17;
   const TRADE_DEADLINE_WEEK = 9;
 
-  // Phase: REGULAR or OFFSEASON (playoffs abstracted for now).
-  let phase = "REGULAR";
+  // Season phases: regular + three offseason weeks.
+  let phase = "REGULAR"; 
+  // "REGULAR", "FA_OFFERS", "FA_RESULTS", "DRAFT"
 
   // League-wide free agents after contracts expire.
   let freeAgents = [];
@@ -335,7 +338,7 @@ function renderApp() {
       const o2 = calcTeamOverall(t2);
       const diff = o1 - o2;
       const baseProb = 0.5 + (diff / 50);
-      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // [web:24][web:31]
+      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // [web:24]
 
       const roll = Math.random();
       if (roll < homeWinProb) {
@@ -351,19 +354,15 @@ function renderApp() {
   /* -------- Offseason: expire contracts into FA pool -------- */
 
   function moveToOffseason() {
-    phase = "OFFSEASON";
     freeAgents = [];
 
     league.forEach(team => {
       const staying = [];
       team.roster.forEach(p => {
-        // Age everyone by 1 and decrement contract years.
         p.age += 1;
         p.years -= 1;
         if (p.years <= 0) {
-          // Contract expired: player becomes free agent.
           const faPlayer = { ...p };
-          // Give FA a simple desired salary baseline (can be refined later).
           faPlayer.askSalary = Math.max(3, p.salary * 1.1);
           faPlayer.askYears = 2;
           freeAgents.push(faPlayer);
@@ -597,12 +596,26 @@ function renderApp() {
           simulateWeekResults();
           currentWeek++;
         } else {
-          // Season finished -> move to offseason
+          // End of regular season: go into FA Offers week.
           moveToOffseason();
+          phase = "FA_OFFERS";
         }
-      } else if (phase === "OFFSEASON") {
-        // Later, this will advance FA days / draft. For now, do nothing.
+      } else if (phase === "FA_OFFERS") {
+        // Free agency offers week -> results week.
+        phase = "FA_RESULTS";
+      } else if (phase === "FA_RESULTS") {
+        // Results week -> draft week.
+        phase = "DRAFT";
+      } else if (phase === "DRAFT") {
+        // Draft done -> reset for next season.
+        currentWeek = 1;
+        league.forEach(t => {
+          t.record.wins = 0;
+          t.record.losses = 0;
+        });
+        phase = "REGULAR";
       }
+
       updateFranchiseHeader();
       const active = navButtons.find(b => b.classList.contains("active"));
       if (active) setActivePage(active.getAttribute("data-page"));
@@ -651,27 +664,30 @@ function renderApp() {
       contentDiv.innerHTML = `
         <h3>Trade Center</h3>
         <p class="fr-small">
-          Placeholder: connects to player + pick trade logic with a Week ${TRADE_DEADLINE_WEEK} deadline.
+          Placeholder: will connect to your player + pick trade system with a Week ${TRADE_DEADLINE_WEEK} deadline.
         </p>
       `;
     }
 
     function renderFreeAgencyPage() {
-      if (phase !== "OFFSEASON") {
+      if (phase !== "FA_OFFERS" && phase !== "FA_RESULTS") {
         contentDiv.innerHTML = `
           <h3>Free Agency</h3>
           <p class="fr-small">
-            Free agency opens in the offseason, after Week ${GAMES_PER_SEASON} and the playoffs.
-            Play through the season, then advance once more to enter the offseason.
+            Free agency runs in the offseason after Week ${GAMES_PER_SEASON}.
+            Finish the season and advance into FA to see the available players.
           </p>
         `;
         return;
       }
 
+      const phaseText = phase === "FA_OFFERS" ? "Free Agency Week" : "Free Agency Results Week";
+
       contentDiv.innerHTML = `
-        <h3>Free Agency (View Only – Next step will add bidding)</h3>
+        <h3>${phaseText}</h3>
         <p class="fr-small">
-          These players had contracts expire and hit the open market. A future step will let all teams bid for them.
+          These players had contracts expire and hit the open market.
+          A later step will add full bidding and AI competition.
         </p>
         <table class="fr-table">
           <thead>
@@ -800,6 +816,17 @@ function renderApp() {
     }
 
     function renderPlayoffPicturePage() {
+      if (phase === "DRAFT") {
+        contentDiv.innerHTML = `
+          <h3>Draft Week</h3>
+          <p class="fr-small">
+            Draft week placeholder. Next step will generate a rookie class and let you use your picks.
+            Advance Week again to start the next regular season.
+          </p>
+        `;
+        return;
+      }
+
       const confATeams = league.filter(t => t.conference === "A");
       const confBTeams = league.filter(t => t.conference === "B");
 
