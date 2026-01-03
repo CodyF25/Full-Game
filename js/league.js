@@ -130,6 +130,9 @@ function renderApp() {
   let currentWeek = 1;
   const GAMES_PER_SEASON = 17;
   const TRADE_DEADLINE_WEEK = 9;
+  // Log of every game (regular + playoffs).
+  // Each entry: { id, week, phase, round, homeId, awayId, homeScore, awayScore, isPlayoff }
+  let games = [];
 
   // Season phases: regular + three offseason weeks.
   let phase = "REGULAR"; 
