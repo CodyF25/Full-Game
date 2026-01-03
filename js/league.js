@@ -133,7 +133,7 @@ function renderApp() {
 
   // Season phases: regular + three offseason weeks.
   let phase = "REGULAR"; 
-  // "REGULAR", "FA_OFFERS", "FA_RESULTS", "DRAFT"
+   // "REGULAR", "PLAYOFFS", "FA_OFFERS", "FA_RESULTS", "DRAFT"
 
   // League-wide free agents after contracts expire.
   let freeAgents = [];
