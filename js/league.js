@@ -1157,7 +1157,7 @@ ${seedLabel(seedsB,7)} ──┘
 
 
     setActivePage("roster");
-    updateFranchiseHeader();       updateNavLabels();
+    updateFranchiseHeader();
   }
 
   goToTeamSelect();
