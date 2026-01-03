@@ -1,6 +1,6 @@
 // league.js
-// Franchise hub with conferences/divisions, seeded standings,
-// Advance Week league sim, and a live playoff picture.
+// League with 2 conferences x 4 divisions (4 teams each), advance-week sim,
+// seeded standings, and a bracket-style playoff picture.
 
 const TEAM_CITY = [
   "New York","Los Angeles","Chicago","Houston","Phoenix","Philadelphia",
@@ -25,7 +25,7 @@ function makeAbbr(city, nick) {
   return (fromCity + fromNick).padEnd(3,"X");
 }
 
-// Generate full league with conferences & divisions.
+// Generate full league with exact 4 per division in each conference.
 function generateLeague() {
   const teams = [];
 
@@ -42,10 +42,12 @@ function generateLeague() {
     return "West";
   }
 
-  // Track how many teams each conference has in each division (target: 4).
-  const counts = {
-    A: { East: 0, North: 0, South: 0, West: 0 },
-    B: { East: 0, North: 0, South: 0, West: 0 }
+  // First, group all teams by region.
+  const pool = {
+    East: [],
+    North: [],
+    South: [],
+    West: []
   };
 
   for (let i = 0; i < 32; i++) {
@@ -53,34 +55,64 @@ function generateLeague() {
     const nick = TEAM_NICK[i % TEAM_NICK.length];
     const name = city + " " + nick;
     const abbr = makeAbbr(city, nick);
-
     const region = regionForCity(city);
 
-    let conference = "A";
-    if (counts.A[region] >= 4 && counts.B[region] < 4) {
-      conference = "B";
-    } else if (counts.B[region] >= 4 && counts.A[region] < 4) {
-      conference = "A";
-    } else {
-      conference = Math.random() < 0.5 ? "A" : "B";
-      if (counts[conference][region] >= 4) {
-        conference = conference === "A" ? "B" : "A";
-      }
-    }
-    counts[conference][region]++;
+    pool[region].push({ id: i, city, nick, name, abbr, region });
+  }
 
+  // Shuffle helper
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  // Shuffle each region so assignments are random.
+  Object.keys(pool).forEach(region => shuffle(pool[region]));
+
+  // For each region, we need 8 teams total (4 in Conf A, 4 in Conf B).
+  // If we have fewer or more, we just slice/duplicate a bit, since the base pool is fixed at 32.
+  Object.keys(pool).forEach(region => {
+    const arr = pool[region];
+    if (arr.length < 8) {
+      // simple wrap-around duplication
+      let idx = 0;
+      while (arr.length < 8) {
+        arr.push({ ...arr[idx], id: 1000 + arr.length }); // unique id stub
+        idx = (idx + 1) % arr.length;
+      }
+    } else if (arr.length > 8) {
+      pool[region] = arr.slice(0,8);
+    }
+  });
+
+  // Now assign first 4 of each region to Conf A, next 4 to Conf B.
+  const confMap = { A: [], B: [] };
+  ["East","North","South","West"].forEach(region => {
+    const arr = pool[region];
+    for (let i = 0; i < 4; i++) confMap.A.push({ ...arr[i], conference: "A", division: region });
+    for (let i = 4; i < 8; i++) confMap.B.push({ ...arr[i], conference: "B", division: region });
+  });
+
+  const leagueBase = [...confMap.A, ...confMap.B];
+  // Ensure exactly 32 teams
+  const finalTeams = leagueBase.slice(0,32);
+
+  finalTeams.forEach((base, idx) => {
     teams.push({
-      id: i,
-      name,
-      abbr,
-      city,
-      conference,
-      division: region,
+      id: idx,
+      name: base.name,
+      abbr: base.abbr,
+      city: base.city,
+      conference: base.conference,
+      division: base.division,
       roster: generateRandomRoster(),  // from players.js
       picks: generateTeamPicks(),      // from trades.js
       record: { wins: 0, losses: 0 }
     });
-  }
+  });
+
   return teams;
 }
 
@@ -195,7 +227,7 @@ function renderApp() {
         <div id="lg-header">
           <h2>Select Your Franchise</h2>
           <div class="lg-small">
-            Each reload generates 32 new teams and rosters, split into two conferences and four divisions per conference.
+            32 teams, 2 conferences, 4 divisions each (4 teams per division).
           </div>
         </div>
 
@@ -297,7 +329,6 @@ function renderApp() {
   /* -------- League sim helper (Advance Week) -------- */
 
   function simulateWeekResults() {
-    // Pair teams arbitrarily each week: simple random round-robin feel.
     const shuffled = [...league];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -312,8 +343,8 @@ function renderApp() {
       const o1 = calcTeamOverall(t1);
       const o2 = calcTeamOverall(t2);
       const diff = o1 - o2;
-      const baseProb = 0.5 + (diff / 50); // rough skill impact
-      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // clamp 10–90% [web:24][web:31]
+      const baseProb = 0.5 + (diff / 50);
+      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // clamp [web:24][web:31]
 
       const roll = Math.random();
       if (roll < homeWinProb) {
@@ -326,9 +357,9 @@ function renderApp() {
     }
   }
 
-  /* -------- Franchise Hub -------- */
+  /* -------- Shared seeding helper (7 teams per conf) -------- */
 
-  function renderSeeds(confTeams) {
+  function computeSeeds(confTeams) {
     const divisions = {
       East: confTeams.filter(t => t.division === "East"),
       North: confTeams.filter(t => t.division === "North"),
@@ -336,10 +367,10 @@ function renderApp() {
       West: confTeams.filter(t => t.division === "West")
     };
 
+    // Division winners (one per division)
     const winners = [];
     Object.keys(divisions).forEach(div => {
       const arr = [...divisions[div]];
-      if (arr.length === 0) return;
       arr.sort((a,b) => {
         const wDiff = b.record.wins - a.record.wins;
         if (wDiff !== 0) return wDiff;
@@ -350,6 +381,7 @@ function renderApp() {
       winners.push(arr[0]);
     });
 
+    // Seed winners 1–4.
     winners.sort((a,b) => {
       const wDiff = b.record.wins - a.record.wins;
       if (wDiff !== 0) return wDiff;
@@ -360,6 +392,7 @@ function renderApp() {
 
     const winnerIds = new Set(winners.map(t => t.id));
     const nonWinners = confTeams.filter(t => !winnerIds.has(t.id));
+
     nonWinners.sort((a,b) => {
       const wDiff = b.record.wins - a.record.wins;
       if (wDiff !== 0) return wDiff;
@@ -367,6 +400,7 @@ function renderApp() {
       if (lDiff !== 0) return lDiff;
       return calcTeamOverall(b) - calcTeamOverall(a);
     });
+
     const wildcards = nonWinners.slice(0,3);
 
     const seeds = [];
@@ -379,11 +413,13 @@ function renderApp() {
     return seeds;
   }
 
+  /* -------- Franchise Hub -------- */
+
   function goToMainFranchise() {
     const team = league.find(t => t.id === controlledTeamId);
     if (!team) return;
 
-    app.innerHTML = `
+    const appHtml = `
       <style>
         #fr-root {
           font-family: Arial, sans-serif;
@@ -452,6 +488,15 @@ function renderApp() {
           padding: 4px 8px;
           font-size: 12px;
         }
+        pre.bracket-block {
+          background: #f9fafc;
+          border: 1px solid #d0d4e0;
+          border-radius: 4px;
+          padding: 6px;
+          font-size: 11px;
+          line-height: 1.4;
+          white-space: pre;
+        }
       </style>
 
       <div id="fr-root">
@@ -493,11 +538,26 @@ function renderApp() {
       </div>
     `;
 
-    updateFranchiseHeader();
+    app.innerHTML = appHtml;
 
     const navButtons = Array.from(document.querySelectorAll("#fr-nav button"));
     const contentDiv = document.getElementById("fr-content");
     const advanceWeekBtn = document.getElementById("fr-advance-week");
+
+    function updateFranchiseHeader() {
+      const t = league.find(x => x.id === controlledTeamId);
+      if (!t) return;
+      const overall = calcTeamOverall(t);
+      const off = calcSideOverall(t,"Offense");
+      const def = calcSideOverall(t,"Defense");
+      const weekSpan = document.getElementById("fr-week");
+      const recordSpan = document.getElementById("fr-record");
+      document.getElementById("fr-ovr").textContent = overall.toFixed(1);
+      document.getElementById("fr-ovr-off").textContent = off.toFixed(1);
+      document.getElementById("fr-ovr-def").textContent = def.toFixed(1);
+      weekSpan.textContent = currentWeek;
+      recordSpan.textContent = `${t.record.wins}-${t.record.losses}`;
+    }
 
     function setActivePage(page) {
       navButtons.forEach(btn => {
@@ -522,25 +582,9 @@ function renderApp() {
       simulateWeekResults();
       currentWeek++;
       updateFranchiseHeader();
-      // Refresh current page to reflect new records/seeds.
       const active = navButtons.find(b => b.classList.contains("active"));
       if (active) setActivePage(active.getAttribute("data-page"));
     });
-
-    function updateFranchiseHeader() {
-      const t = league.find(x => x.id === controlledTeamId);
-      if (!t) return;
-      const overall = calcTeamOverall(t);
-      const off = calcSideOverall(t,"Offense");
-      const def = calcSideOverall(t,"Defense");
-      const weekSpan = document.getElementById("fr-week");
-      const recordSpan = document.getElementById("fr-record");
-      document.getElementById("fr-ovr").textContent = overall.toFixed(1);
-      document.getElementById("fr-ovr-off").textContent = off.toFixed(1);
-      document.getElementById("fr-ovr-def").textContent = def.toFixed(1);
-      weekSpan.textContent = currentWeek;
-      recordSpan.textContent = `${t.record.wins}-${t.record.losses}`;
-    }
 
     function renderRosterPage() {
       const t = league.find(x => x.id === controlledTeamId);
@@ -585,7 +629,7 @@ function renderApp() {
       contentDiv.innerHTML = `
         <h3>Trade Center</h3>
         <p class="fr-small">
-          This will connect to your trade value system (players + 1st–7th picks) and honor the Week ${TRADE_DEADLINE_WEEK} deadline.
+          This will hook into your player + pick trade logic with a Week ${TRADE_DEADLINE_WEEK} deadline.
         </p>
       `;
     }
@@ -594,7 +638,7 @@ function renderApp() {
       contentDiv.innerHTML = `
         <h3>Free Agency</h3>
         <p class="fr-small">
-          This page will handle expiring contracts and free-agent bidding after the championship.
+          Placeholder for free-agency period after the championship.
         </p>
       `;
     }
@@ -603,7 +647,7 @@ function renderApp() {
       contentDiv.innerHTML = `
         <h3>Depth Chart</h3>
         <p class="fr-small">
-          Here we will later show starters and backups by position (QB1/QB2, RB1/RB2, WR1–WR3, etc.).
+          Placeholder for showing starters/backups at each position.
         </p>
       `;
     }
@@ -638,13 +682,13 @@ function renderApp() {
       const confATeams = league.filter(t => t.conference === "A");
       const confBTeams = league.filter(t => t.conference === "B");
 
-      const seedsA = renderSeeds(confATeams);
-      const seedsB = renderSeeds(confBTeams);
+      const seedsA = computeSeeds(confATeams);
+      const seedsB = computeSeeds(confBTeams);
 
       contentDiv.innerHTML = `
         <h3>Standings & Seeds</h3>
         <p class="fr-small">
-          Division winners are seeds 1–4; three best non-division winners are seeds 5–7 in each conference.
+          Seeds 1–4 are division winners; seeds 5–7 are wildcards (best non-division winners).
         </p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <div id="fr-standings-A"></div>
@@ -698,43 +742,60 @@ function renderApp() {
       const confATeams = league.filter(t => t.conference === "A");
       const confBTeams = league.filter(t => t.conference === "B");
 
-      const seedsA = renderSeeds(confATeams);
-      const seedsB = renderSeeds(confBTeams);
+      const seedsA = computeSeeds(confATeams);
+      const seedsB = computeSeeds(confBTeams);
 
-      function seedLine(seeds, n) {
+      function seedLabel(seeds, n) {
         const s = seeds.find(x => x.seed === n);
-        if (!s) return `Seed ${n}: ---`;
+        if (!s) return `${n}: ---`;
         const t = s.team;
-        return `Seed ${n}: ${t.abbr} (${t.record.wins}-${t.record.losses})`;
+        return `${n}: ${t.abbr} (${t.record.wins}-${t.record.losses})`;
       }
 
       contentDiv.innerHTML = `
         <h3>Playoff Picture (If Season Ended Today)</h3>
         <p class="fr-small">
-          Brackets are based on current records and seeding rules: 4 division winners (1–4) plus 3 wildcards (5–7) per conference.
-          Updated each time you advance a week.
+          Bracket view: 7 teams per conference. Seed 1 gets a bye; wildcard round is 2 vs 7, 3 vs 6, 4 vs 5.
         </p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <div>
             <h4>Conference A</h4>
-            <pre class="fr-small">
-${seedLine(seedsA,1)}  (bye)
+            <pre class="bracket-block">
+          ${seedLabel(seedsA,1)}  (bye)
 
-Wildcard Round:
-${seedLine(seedsA,2)} vs ${seedLine(seedsA,7)}
-${seedLine(seedsA,3)} vs ${seedLine(seedsA,6)}
-${seedLine(seedsA,4)} vs ${seedLine(seedsA,5)}
+${seedLabel(seedsA,4)} ──┐
+                ├─ Divisional
+${seedLabel(seedsA,5)} ──┘
+
+${seedLabel(seedsA,3)} ──┐
+                ├─ Divisional
+${seedLabel(seedsA,6)} ──┘
+
+${seedLabel(seedsA,2)} ──┐
+                ├─ Divisional
+${seedLabel(seedsA,7)} ──┘
+
+                └── Conference Champion → Super Bowl
             </pre>
           </div>
           <div>
             <h4>Conference B</h4>
-            <pre class="fr-small">
-${seedLine(seedsB,1)}  (bye)
+            <pre class="bracket-block">
+          ${seedLabel(seedsB,1)}  (bye)
 
-Wildcard Round:
-${seedLine(seedsB,2)} vs ${seedLine(seedsB,7)}
-${seedLine(seedsB,3)} vs ${seedLine(seedsB,6)}
-${seedLine(seedsB,4)} vs ${seedLine(seedsB,5)}
+${seedLabel(seedsB,4)} ──┐
+                ├─ Divisional
+${seedLabel(seedsB,5)} ──┘
+
+${seedLabel(seedsB,3)} ──┐
+                ├─ Divisional
+${seedLabel(seedsB,6)} ──┘
+
+${seedLabel(seedsB,2)} ──┐
+                ├─ Divisional
+${seedLabel(seedsB,7)} ──┘
+
+                └── Conference Champion → Super Bowl
             </pre>
           </div>
         </div>
