@@ -1,15 +1,17 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>NFL Franchise League – Step 2</title>
+    <title>Franchise League</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
   </head>
   <body>
     <div id="app"></div>
 
-    <!-- Order matters -->
+    <!-- Script load order matters: data/helpers first, then league UI -->
     <script src="js/players.js"></script>
     <script src="js/trades.js"></script>
+    <script src="js/draft.js"></script>
     <script src="js/league.js"></script>
   </body>
 </html>
