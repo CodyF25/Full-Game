@@ -1,6 +1,5 @@
 // league.js
-// League with 2 conferences x 4 divisions (4 teams each), advance-week sim,
-// seeded standings, and a bracket-style playoff picture.
+// Adds season phase + simple offseason that moves expiring contracts into a free agent pool.
 
 const TEAM_CITY = [
   "New York","Los Angeles","Chicago","Houston","Phoenix","Philadelphia",
@@ -42,13 +41,7 @@ function generateLeague() {
     return "West";
   }
 
-  // First, group all teams by region.
-  const pool = {
-    East: [],
-    North: [],
-    South: [],
-    West: []
-  };
+  const pool = { East: [], North: [], South: [], West: [] };
 
   for (let i = 0; i < 32; i++) {
     const city = TEAM_CITY[i % TEAM_CITY.length];
@@ -56,11 +49,9 @@ function generateLeague() {
     const name = city + " " + nick;
     const abbr = makeAbbr(city, nick);
     const region = regionForCity(city);
-
     pool[region].push({ id: i, city, nick, name, abbr, region });
   }
 
-  // Shuffle helper
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -68,18 +59,14 @@ function generateLeague() {
     }
   }
 
-  // Shuffle each region so assignments are random.
   Object.keys(pool).forEach(region => shuffle(pool[region]));
 
-  // For each region, we need 8 teams total (4 in Conf A, 4 in Conf B).
-  // If we have fewer or more, we just slice/duplicate a bit, since the base pool is fixed at 32.
   Object.keys(pool).forEach(region => {
     const arr = pool[region];
     if (arr.length < 8) {
-      // simple wrap-around duplication
       let idx = 0;
       while (arr.length < 8) {
-        arr.push({ ...arr[idx], id: 1000 + arr.length }); // unique id stub
+        arr.push({ ...arr[idx], id: 1000 + arr.length });
         idx = (idx + 1) % arr.length;
       }
     } else if (arr.length > 8) {
@@ -87,7 +74,6 @@ function generateLeague() {
     }
   });
 
-  // Now assign first 4 of each region to Conf A, next 4 to Conf B.
   const confMap = { A: [], B: [] };
   ["East","North","South","West"].forEach(region => {
     const arr = pool[region];
@@ -96,7 +82,6 @@ function generateLeague() {
   });
 
   const leagueBase = [...confMap.A, ...confMap.B];
-  // Ensure exactly 32 teams
   const finalTeams = leagueBase.slice(0,32);
 
   finalTeams.forEach((base, idx) => {
@@ -143,6 +128,12 @@ function renderApp() {
   let currentWeek = 1;
   const GAMES_PER_SEASON = 17;
   const TRADE_DEADLINE_WEEK = 9;
+
+  // Phase: REGULAR or OFFSEASON (playoffs abstracted for now).
+  let phase = "REGULAR";
+
+  // League-wide free agents after contracts expire.
+  let freeAgents = [];
 
   /* -------- Team Select Screen -------- */
 
@@ -344,7 +335,7 @@ function renderApp() {
       const o2 = calcTeamOverall(t2);
       const diff = o1 - o2;
       const baseProb = 0.5 + (diff / 50);
-      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // clamp [web:24][web:31]
+      const homeWinProb = Math.max(0.1, Math.min(0.9, baseProb)); // [web:24][web:31]
 
       const roll = Math.random();
       if (roll < homeWinProb) {
@@ -357,6 +348,33 @@ function renderApp() {
     }
   }
 
+  /* -------- Offseason: expire contracts into FA pool -------- */
+
+  function moveToOffseason() {
+    phase = "OFFSEASON";
+    freeAgents = [];
+
+    league.forEach(team => {
+      const staying = [];
+      team.roster.forEach(p => {
+        // Age everyone by 1 and decrement contract years.
+        p.age += 1;
+        p.years -= 1;
+        if (p.years <= 0) {
+          // Contract expired: player becomes free agent.
+          const faPlayer = { ...p };
+          // Give FA a simple desired salary baseline (can be refined later).
+          faPlayer.askSalary = Math.max(3, p.salary * 1.1);
+          faPlayer.askYears = 2;
+          freeAgents.push(faPlayer);
+        } else {
+          staying.push(p);
+        }
+      });
+      team.roster = staying;
+    });
+  }
+
   /* -------- Shared seeding helper (7 teams per conf) -------- */
 
   function computeSeeds(confTeams) {
@@ -367,7 +385,6 @@ function renderApp() {
       West: confTeams.filter(t => t.division === "West")
     };
 
-    // Division winners (one per division)
     const winners = [];
     Object.keys(divisions).forEach(div => {
       const arr = [...divisions[div]];
@@ -381,7 +398,6 @@ function renderApp() {
       winners.push(arr[0]);
     });
 
-    // Seed winners 1–4.
     winners.sort((a,b) => {
       const wDiff = b.record.wins - a.record.wins;
       if (wDiff !== 0) return wDiff;
@@ -419,7 +435,7 @@ function renderApp() {
     const team = league.find(t => t.id === controlledTeamId);
     if (!team) return;
 
-    const appHtml = `
+    app.innerHTML = `
       <style>
         #fr-root {
           font-family: Arial, sans-serif;
@@ -505,6 +521,7 @@ function renderApp() {
             <h2>${team.name} Franchise Hub</h2>
             <div class="fr-small">
               Conference ${team.conference}, ${team.division} Division<br>
+              Phase: <span id="fr-phase">${phase}</span> &nbsp; | &nbsp;
               Week <span id="fr-week">${currentWeek}</span>/${GAMES_PER_SEASON} &nbsp; | &nbsp;
               Record: <span id="fr-record">${team.record.wins}-${team.record.losses}</span>
             </div>
@@ -538,8 +555,6 @@ function renderApp() {
       </div>
     `;
 
-    app.innerHTML = appHtml;
-
     const navButtons = Array.from(document.querySelectorAll("#fr-nav button"));
     const contentDiv = document.getElementById("fr-content");
     const advanceWeekBtn = document.getElementById("fr-advance-week");
@@ -550,13 +565,12 @@ function renderApp() {
       const overall = calcTeamOverall(t);
       const off = calcSideOverall(t,"Offense");
       const def = calcSideOverall(t,"Defense");
-      const weekSpan = document.getElementById("fr-week");
-      const recordSpan = document.getElementById("fr-record");
       document.getElementById("fr-ovr").textContent = overall.toFixed(1);
       document.getElementById("fr-ovr-off").textContent = off.toFixed(1);
       document.getElementById("fr-ovr-def").textContent = def.toFixed(1);
-      weekSpan.textContent = currentWeek;
-      recordSpan.textContent = `${t.record.wins}-${t.record.losses}`;
+      document.getElementById("fr-week").textContent = currentWeek;
+      document.getElementById("fr-record").textContent = `${t.record.wins}-${t.record.losses}`;
+      document.getElementById("fr-phase").textContent = phase;
     }
 
     function setActivePage(page) {
@@ -578,9 +592,17 @@ function renderApp() {
     });
 
     advanceWeekBtn.addEventListener("click", () => {
-      if (currentWeek >= GAMES_PER_SEASON) return;
-      simulateWeekResults();
-      currentWeek++;
+      if (phase === "REGULAR") {
+        if (currentWeek < GAMES_PER_SEASON) {
+          simulateWeekResults();
+          currentWeek++;
+        } else {
+          // Season finished -> move to offseason
+          moveToOffseason();
+        }
+      } else if (phase === "OFFSEASON") {
+        // Later, this will advance FA days / draft. For now, do nothing.
+      }
       updateFranchiseHeader();
       const active = navButtons.find(b => b.classList.contains("active"));
       if (active) setActivePage(active.getAttribute("data-page"));
@@ -629,25 +651,64 @@ function renderApp() {
       contentDiv.innerHTML = `
         <h3>Trade Center</h3>
         <p class="fr-small">
-          This will hook into your player + pick trade logic with a Week ${TRADE_DEADLINE_WEEK} deadline.
+          Placeholder: connects to player + pick trade logic with a Week ${TRADE_DEADLINE_WEEK} deadline.
         </p>
       `;
     }
 
     function renderFreeAgencyPage() {
+      if (phase !== "OFFSEASON") {
+        contentDiv.innerHTML = `
+          <h3>Free Agency</h3>
+          <p class="fr-small">
+            Free agency opens in the offseason, after Week ${GAMES_PER_SEASON} and the playoffs.
+            Play through the season, then advance once more to enter the offseason.
+          </p>
+        `;
+        return;
+      }
+
       contentDiv.innerHTML = `
-        <h3>Free Agency</h3>
+        <h3>Free Agency (View Only – Next step will add bidding)</h3>
         <p class="fr-small">
-          Placeholder for free-agency period after the championship.
+          These players had contracts expire and hit the open market. A future step will let all teams bid for them.
         </p>
+        <table class="fr-table">
+          <thead>
+            <tr>
+              <th>Pos</th>
+              <th>Name</th>
+              <th>Age</th>
+              <th>Dev</th>
+              <th>OVR</th>
+              <th>Ask ($M)</th>
+              <th>Ask Years</th>
+            </tr>
+          </thead>
+          <tbody id="fr-fa-body"></tbody>
+        </table>
       `;
+      const body = document.getElementById("fr-fa-body");
+      freeAgents.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${p.pos}</td>
+          <td>${p.name}</td>
+          <td>${p.age}</td>
+          <td>${p.dev}</td>
+          <td>${p.ovr}</td>
+          <td>${p.askSalary.toFixed(1)}</td>
+          <td>${p.askYears}</td>
+        `;
+        body.appendChild(tr);
+      });
     }
 
     function renderDepthChartPage() {
       contentDiv.innerHTML = `
         <h3>Depth Chart</h3>
         <p class="fr-small">
-          Placeholder for showing starters/backups at each position.
+          Placeholder for starters/backups by position.
         </p>
       `;
     }
