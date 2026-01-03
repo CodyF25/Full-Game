@@ -132,13 +132,16 @@ function renderApp() {
   const TRADE_DEADLINE_WEEK = 9;
 
   // Season phases: regular + three offseason weeks.
-  let phase = "REGULAR";
+  let phase = "REGULAR"; 
   // "REGULAR", "FA_OFFERS", "FA_RESULTS", "DRAFT"
 
   // League-wide free agents after contracts expire.
   let freeAgents = [];
   // Log of FA signings for the last FA cycle.
   let lastFASignings = [];
+  // Current year's rookie class (generated when entering Draft phase).
+  let draftClass = null;
+
 
   /* -------- Team Select Screen -------- */
 
