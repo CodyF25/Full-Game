@@ -966,28 +966,50 @@ function renderApp() {
 
     function renderPlayoffPicturePage() {
       if (phase === "DRAFT") {
+        // Draft board view (no picking yet).
+        if (!draftClass) {
+          draftClass = generateDraftClass();
+        }
+
         contentDiv.innerHTML = `
-          <h3>Draft Week</h3>
+          <h3>Draft Week – Big Board</h3>
           <p class="fr-small">
-            Draft week placeholder. Next step will generate a rookie class and let you use your picks.
-            Advance Week again to start the next regular season.
+            This is the rookie class for this offseason, sorted by scout grade.
+            Next step will add team draft order and actual selections.
           </p>
+          <table class="fr-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Pos</th>
+                <th>Name</th>
+                <th>Age</th>
+                <th>Scout Grade</th>
+                <th>Round Hint</th>
+              </tr>
+            </thead>
+            <tbody id="fr-draft-body"></tbody>
+          </table>
         `;
+
+        const body = document.getElementById("fr-draft-body");
+        draftClass.forEach((p, idx) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td>${p.pos}</td>
+            <td>${p.name}</td>
+            <td>${p.age}</td>
+            <td>${p.scoutGrade}</td>
+            <td>${p.roundHint}</td>
+          `;
+          body.appendChild(tr);
+        });
         return;
       }
 
-      const confATeams = league.filter(t => t.conference === "A");
-      const confBTeams = league.filter(t => t.conference === "B");
+      const confATeams = ...
 
-      const seedsA = computeSeeds(confATeams);
-      const seedsB = computeSeeds(confBTeams);
-
-      function seedLabel(seeds, n) {
-        const s = seeds.find(x => x.seed === n);
-        if (!s) return `${n}: ---`;
-        const t = s.team;
-        return `${n}: ${t.abbr} (${t.record.wins}-${t.record.losses})`;
-      }
 
       contentDiv.innerHTML = `
         <h3>Playoff Picture (If Season Ended Today)</h3>
