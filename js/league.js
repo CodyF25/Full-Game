@@ -964,7 +964,7 @@ function renderApp() {
       renderConference("B", "fr-standings-B", confBTeams, byConf, seedsB);
     }
 
-      function renderPlayoffPicturePage() {
+       function renderPlayoffPicturePage() {
       if (phase === "DRAFT") {
         // Draft board view (no picking yet).
         if (!draftClass) {
@@ -1008,11 +1008,72 @@ function renderApp() {
         return;
       }
 
-      const confATeams = ...
-      const confBTeams = ...
-      // rest of your existing playoff picture code here
+      // Normal playoff picture (non-draft phases).
+      const confATeams = league.filter(t => t.conference === "A");
+      const confBTeams = league.filter(t => t.conference === "B");
 
+      function computeSeeds(confTeams) {
+        const divisions = {
+          East: confTeams.filter(t => t.division === "East"),
+          North: confTeams.filter(t => t.division === "North"),
+          South: confTeams.filter(t => t.division === "South"),
+          West: confTeams.filter(t => t.division === "West")
+        };
 
+        const winners = [];
+        Object.keys(divisions).forEach(div => {
+          const arr = [...divisions[div]];
+          arr.sort((a,b) => {
+            const wDiff = b.record.wins - a.record.wins;
+            if (wDiff !== 0) return wDiff;
+            const lDiff = a.record.losses - b.record.losses;
+            if (lDiff !== 0) return lDiff;
+            return calcTeamOverall(b) - calcTeamOverall(a);
+          });
+          if (arr.length > 0) {
+            winners.push(arr[0]);
+          }
+        });
+
+        winners.sort((a,b) => {
+          const wDiff = b.record.wins - a.record.wins;
+          if (wDiff !== 0) return wDiff;
+          const lDiff = a.record.losses - b.record.losses;
+          if (lDiff !== 0) return lDiff;
+          return calcTeamOverall(b) - calcTeamOverall(a);
+        });
+
+        const winnerIds = new Set(winners.map(t => t.id));
+        const nonWinners = confTeams.filter(t => !winnerIds.has(t.id));
+
+        nonWinners.sort((a,b) => {
+          const wDiff = b.record.wins - a.record.wins;
+          if (wDiff !== 0) return wDiff;
+          const lDiff = a.record.losses - b.record.losses;
+          if (lDiff !== 0) return lDiff;
+          return calcTeamOverall(b) - calcTeamOverall(a);
+        });
+
+        const wildcards = nonWinners.slice(0,3);
+
+        const seeds = [];
+        winners.forEach((t, idx) => {
+          seeds.push({ seed: idx + 1, team: t });
+        });
+        wildcards.forEach((t, idx) => {
+          seeds.push({ seed: 5 + idx, team: t });
+        });
+        return seeds;
+      }
+
+      const seedsA = computeSeeds(confATeams);
+      const seedsB = computeSeeds(confBTeams);
+
+      function seedLabel(seeds, num) {
+        const s = seeds.find(x => x.seed === num);
+        if (!s) return `Seed ${num}: TBD`;
+        return `Seed ${num}: ${s.team.abbr} (${s.team.record.wins}-${s.team.record.losses})`;
+      }
 
       contentDiv.innerHTML = `
         <h3>Playoff Picture (If Season Ended Today)</h3>
@@ -1063,6 +1124,7 @@ ${seedLabel(seedsB,7)} ──┘
         </div>
       `;
     }
+
 
     setActivePage("roster");
     updateFranchiseHeader();
