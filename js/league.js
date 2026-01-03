@@ -657,15 +657,22 @@ function renderApp() {
     }
 
     advanceWeekBtn.addEventListener("click", () => {
-      if (phase === "REGULAR") {
+           if (phase === "REGULAR") {
         if (currentWeek < GAMES_PER_SEASON) {
           simulateWeekResults();
           currentWeek++;
         } else {
-          moveToOffseason();
-          phase = "FA_OFFERS";
+          // Regular season complete -> go to playoffs.
+          phase = "PLAYOFFS";
         }
+      } else if (phase === "PLAYOFFS") {
+        // For now, simulate the entire playoffs in one step.
+        // (You already see the bracket on the Playoff Picture page.)
+        // After this, move into free agency.
+        moveToOffseason();
+        phase = "FA_OFFERS";
       } else if (phase === "FA_OFFERS") {
+
         // Move into results week and resolve signings.
         resolveFreeAgency();
         phase = "FA_RESULTS";
