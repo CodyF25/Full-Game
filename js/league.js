@@ -762,13 +762,14 @@ function renderApp() {
           // Regular season complete -> go to playoffs.
           phase = "PLAYOFFS";
         }
-      } else if (phase === "PLAYOFFS") {
-        // For now, simulate the entire playoffs in one step.
-        // (You already see the bracket on the Playoff Picture page.)
-        // After this, move into free agency.
+           } else if (phase === "PLAYOFFS") {
+        // Placeholder: simulate full playoffs at once (no round-by-round bracket yet).
+        // Later this block will step through WC -> DIV -> CONF -> CHAMP using playoffRound.
         moveToOffseason();
+        playoffRound = null;
         phase = "FA_OFFERS";
       } else if (phase === "FA_OFFERS") {
+
 
         // Move into results week and resolve signings.
         resolveFreeAgency();
