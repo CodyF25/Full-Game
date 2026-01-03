@@ -585,8 +585,9 @@ function renderApp() {
         </div>
 
         <div id="fr-main">
-          <div id="fr-nav">
+              <div id="fr-nav">
             <button data-page="roster" class="active">Roster</button>
+            <button data-page="schedule">Schedule</button>
             <button data-page="trade">Trade Center</button>
             <button data-page="fa">Free Agency</button>
             <button data-page="depth">Depth Chart</button>
