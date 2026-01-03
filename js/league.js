@@ -634,12 +634,14 @@ function renderApp() {
         btn.classList.toggle("active", btn.getAttribute("data-page") === page);
       });
       if (page === "roster") renderRosterPage();
+      else if (page === "schedule") renderSchedulePage();
       else if (page === "trade") renderTradeCenterPage();
       else if (page === "fa") renderFreeAgencyPage();
       else if (page === "depth") renderDepthChartPage();
       else if (page === "standings") renderStandingsPage();
       else if (page === "playoffs") renderPlayoffPicturePage();
     }
+
 
     navButtons.forEach(btn => {
       btn.addEventListener("click", () => {
