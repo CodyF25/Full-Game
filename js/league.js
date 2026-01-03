@@ -1,7 +1,7 @@
 // league.js
-// Full league: 2 conferences x 4 divisions (4 teams each),
-// regular season + advance-week sim, seeded playoffs view,
-// and an offseason cycle: FA Offers Week -> FA Results Week -> Draft Week -> next season.
+// League with 2 conferences x 4 divisions (4 teams each),
+// regular season + sim, seeded playoff picture, and an offseason cycle:
+// FA Offers Week -> FA Results Week (with AI competition) -> Draft Week -> next season.
 
 const TEAM_CITY = [
   "New York","Los Angeles","Chicago","Houston","Phoenix","Philadelphia",
@@ -132,11 +132,13 @@ function renderApp() {
   const TRADE_DEADLINE_WEEK = 9;
 
   // Season phases: regular + three offseason weeks.
-  let phase = "REGULAR"; 
+  let phase = "REGULAR";
   // "REGULAR", "FA_OFFERS", "FA_RESULTS", "DRAFT"
 
   // League-wide free agents after contracts expire.
   let freeAgents = [];
+  // Log of FA signings for the last FA cycle.
+  let lastFASignings = [];
 
   /* -------- Team Select Screen -------- */
 
@@ -355,6 +357,7 @@ function renderApp() {
 
   function moveToOffseason() {
     freeAgents = [];
+    lastFASignings = [];
 
     league.forEach(team => {
       const staying = [];
@@ -365,6 +368,7 @@ function renderApp() {
           const faPlayer = { ...p };
           faPlayer.askSalary = Math.max(3, p.salary * 1.1);
           faPlayer.askYears = 2;
+          faPlayer.offers = []; // holds offer objects
           freeAgents.push(faPlayer);
         } else {
           staying.push(p);
@@ -374,7 +378,7 @@ function renderApp() {
     });
   }
 
-  /* -------- Shared seeding helper (7 teams per conf) -------- */
+  /* -------- Shared helpers -------- */
 
   function computeSeeds(confTeams) {
     const divisions = {
@@ -426,6 +430,14 @@ function renderApp() {
       seeds.push({ seed: 5 + idx, team: t });
     });
     return seeds;
+  }
+
+  // FA offer score: salary*years + bonus + small boost for team overall. [web:179][web:185]
+  function faOfferScore(offer, teamOverall) {
+    const moneyValue = offer.salaryPerYear * offer.years;
+    const bonusValue = offer.bonus || 0;
+    const teamBoost = teamOverall * 0.2;
+    return moneyValue + bonusValue + teamBoost;
   }
 
   /* -------- Franchise Hub -------- */
@@ -512,6 +524,10 @@ function renderApp() {
           line-height: 1.4;
           white-space: pre;
         }
+        #fr-fa-offer-panel input {
+          width: 80px;
+          font-size: 12px;
+        }
       </style>
 
       <div id="fr-root">
@@ -590,18 +606,65 @@ function renderApp() {
       });
     });
 
+    // Resolve FA signings when entering FA_RESULTS.
+    function resolveFreeAgency() {
+      lastFASignings = [];
+      const yourTeam = league.find(t => t.id === controlledTeamId);
+
+      // AI "league" teamOverall baseline.
+      const avgOverall = league.reduce((s,t) => s + calcTeamOverall(t), 0) / league.length;
+
+      const remainingFA = [];
+      freeAgents.forEach(p => {
+        // Ensure an AI market offer exists.
+        const aiOffer = {
+          teamId: -1, // market
+          salaryPerYear: p.askSalary,
+          years: p.askYears,
+          bonus: p.askSalary
+        };
+        const offers = [...p.offers, aiOffer];
+
+        let best = null;
+        let bestScore = -Infinity;
+        offers.forEach(o => {
+          const teamOverall = o.teamId === controlledTeamId
+            ? calcTeamOverall(yourTeam)
+            : avgOverall;
+          const score = faOfferScore(o, teamOverall);
+          if (score > bestScore) {
+            bestScore = score;
+            best = o;
+          }
+        });
+
+        if (best && best.teamId === controlledTeamId) {
+          // Sign with your team.
+          const copy = { ...p };
+          copy.salary = best.salaryPerYear;
+          copy.years = best.years;
+          yourTeam.roster.push(copy);
+          lastFASignings.push(`${p.name} signed with your team for ${best.years}y / $${best.salaryPerYear.toFixed(1)}M + $${(best.bonus||0).toFixed(1)}M bonus.`);
+        } else {
+          // Signs elsewhere (AI) – remove from pool.
+        }
+      });
+
+      freeAgents = remainingFA; // currently all signed or gone
+    }
+
     advanceWeekBtn.addEventListener("click", () => {
       if (phase === "REGULAR") {
         if (currentWeek < GAMES_PER_SEASON) {
           simulateWeekResults();
           currentWeek++;
         } else {
-          // End of regular season: go into FA Offers week.
           moveToOffseason();
           phase = "FA_OFFERS";
         }
       } else if (phase === "FA_OFFERS") {
-        // Free agency offers week -> results week.
+        // Move into results week and resolve signings.
+        resolveFreeAgency();
         phase = "FA_RESULTS";
       } else if (phase === "FA_RESULTS") {
         // Results week -> draft week.
@@ -681,43 +744,123 @@ function renderApp() {
         return;
       }
 
-      const phaseText = phase === "FA_OFFERS" ? "Free Agency Week" : "Free Agency Results Week";
+      const isOffersWeek = phase === "FA_OFFERS";
+      const phaseText = isOffersWeek ? "Free Agency Week" : "Free Agency Results Week";
 
       contentDiv.innerHTML = `
         <h3>${phaseText}</h3>
         <p class="fr-small">
-          These players had contracts expire and hit the open market.
-          A later step will add full bidding and AI competition.
+          During Free Agency Week you can offer salary and bonus to free agents.
+          In Results Week, they choose between your offer and a league market offer.
         </p>
-        <table class="fr-table">
-          <thead>
-            <tr>
-              <th>Pos</th>
-              <th>Name</th>
-              <th>Age</th>
-              <th>Dev</th>
-              <th>OVR</th>
-              <th>Ask ($M)</th>
-              <th>Ask Years</th>
-            </tr>
-          </thead>
-          <tbody id="fr-fa-body"></tbody>
-        </table>
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
+          <div>
+            <table class="fr-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Pos</th>
+                  <th>Name</th>
+                  <th>Age</th>
+                  <th>Dev</th>
+                  <th>OVR</th>
+                  <th>Ask ($M)</th>
+                  <th>Ask Yrs</th>
+                  <th>Your Offer</th>
+                </tr>
+              </thead>
+              <tbody id="fr-fa-body"></tbody>
+            </table>
+          </div>
+          <div id="fr-fa-offer-panel">
+            ${isOffersWeek ? `
+            <h4>Your Offer</h4>
+            <p class="fr-small">
+              Select a free agent on the left, then set salary, years, and bonus.
+            </p>
+            <div>Salary/yr ($M): <input id="fr-fa-salary" type="number" step="0.5" value="5"></div>
+            <div>Years: <input id="fr-fa-years" type="number" step="1" value="2"></div>
+            <div>Bonus ($M): <input id="fr-fa-bonus" type="number" step="0.5" value="2"></div>
+            <button id="fr-fa-make-offer">Make Offer</button>
+            <div id="fr-fa-message" class="fr-small"></div>
+            ` : `
+            <h4>Results</h4>
+            <p class="fr-small">
+              These are the players you signed this FA cycle.
+            </p>
+            <div id="fr-fa-results-log" class="fr-small"></div>
+            `}
+          </div>
+        </div>
       `;
+
       const body = document.getElementById("fr-fa-body");
-      freeAgents.forEach(p => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${p.pos}</td>
-          <td>${p.name}</td>
-          <td>${p.age}</td>
-          <td>${p.dev}</td>
-          <td>${p.ovr}</td>
-          <td>${p.askSalary.toFixed(1)}</td>
-          <td>${p.askYears}</td>
-        `;
-        body.appendChild(tr);
-      });
+
+      let selectedIndex = 0;
+
+      function renderRows() {
+        body.innerHTML = "";
+        freeAgents.forEach((p, idx) => {
+          const yourOffer = p.offers.find(o => o.teamId === controlledTeamId);
+          const offerText = yourOffer
+            ? `${yourOffer.years}y / $${yourOffer.salaryPerYear.toFixed(1)}M + $${(yourOffer.bonus||0).toFixed(1)}M`
+            : "-";
+          const tr = document.createElement("tr");
+          if (idx === selectedIndex) tr.style.background = "#e4ecff";
+          tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td>${p.pos}</td>
+            <td>${p.name}</td>
+            <td>${p.age}</td>
+            <td>${p.dev}</td>
+            <td>${p.ovr}</td>
+            <td>${p.askSalary.toFixed(1)}</td>
+            <td>${p.askYears}</td>
+            <td>${offerText}</td>
+          `;
+          tr.addEventListener("click", () => {
+            selectedIndex = idx;
+            renderRows();
+          });
+          body.appendChild(tr);
+        });
+      }
+
+      renderRows();
+
+      if (isOffersWeek) {
+        const salaryInput = document.getElementById("fr-fa-salary");
+        const yearsInput = document.getElementById("fr-fa-years");
+        const bonusInput = document.getElementById("fr-fa-bonus");
+        const makeOfferBtn = document.getElementById("fr-fa-make-offer");
+        const msgDiv = document.getElementById("fr-fa-message");
+
+        makeOfferBtn.addEventListener("click", () => {
+          const p = freeAgents[selectedIndex];
+          if (!p) return;
+          const salary = parseFloat(salaryInput.value) || p.askSalary;
+          const years = parseInt(yearsInput.value,10) || p.askYears;
+          const bonus = parseFloat(bonusInput.value) || 0;
+
+          const existingIdx = p.offers.findIndex(o => o.teamId === controlledTeamId);
+          const offer = { teamId: controlledTeamId, salaryPerYear: salary, years, bonus };
+          if (existingIdx >= 0) {
+            p.offers[existingIdx] = offer;
+          } else {
+            p.offers.push(offer);
+          }
+          msgDiv.textContent = `You offered ${p.name} ${years}y / $${salary.toFixed(1)}M + $${bonus.toFixed(1)}M bonus.`;
+          renderRows();
+        });
+      } else {
+        // Results week: show summary of your signings.
+        const logDiv = document.getElementById("fr-fa-results-log");
+        if (!lastFASignings.length) {
+          logDiv.textContent = "You did not sign any players this free agency.";
+        } else {
+          logDiv.textContent = lastFASignings.join("\n");
+        }
+      }
     }
 
     function renderDepthChartPage() {
