@@ -964,7 +964,7 @@ function renderApp() {
       renderConference("B", "fr-standings-B", confBTeams, byConf, seedsB);
     }
 
-    function renderPlayoffPicturePage() {
+      function renderPlayoffPicturePage() {
       if (phase === "DRAFT") {
         // Draft board view (no picking yet).
         if (!draftClass) {
@@ -1009,6 +1009,9 @@ function renderApp() {
       }
 
       const confATeams = ...
+      const confBTeams = ...
+      // rest of your existing playoff picture code here
+
 
 
       contentDiv.innerHTML = `
